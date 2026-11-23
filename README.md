@@ -46,3 +46,7 @@ Each folder's README stands on its own, but later steps assume the earlier ones.
 ## Platforms
 
 Only Oracle Cloud and Cloudflare so far. Other platforms get their own folder when they're done for real.
+
+## Licence
+
+MIT: copy, change and reuse freely. See [LICENSE](LICENSE).
