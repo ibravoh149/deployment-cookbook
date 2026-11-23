@@ -1,0 +1,77 @@
+# .github/workflows/deploy.yml: checks on every pull request; checks then deploy on main; a manual button.
+name: Deploy server
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    # Only changes that affect the server deploy.
+    paths:
+      - "app/**"
+      - "deploy/**"
+      - "scripts/deploy.sh"
+      - ".github/workflows/deploy.yml"
+  # The button: Actions → Deploy server → Run workflow.
+  workflow_dispatch:
+
+# One run per branch at a time. On main a newer push waits for the running deploy instead of cutting it off.
+concurrency:
+  group: deploy-server-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Type check and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # A throwaway database for the tests.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U app" --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Replace with your project's own install, type check and tests.
+      - run: npm ci
+        working-directory: app
+      - run: npm test
+        working-directory: app
+        env:
+          DATABASE_URL: postgres://app:app@localhost:5432/app
+
+  deploy:
+    name: Deploy
+    needs: check
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: SSH key and the server's pinned host key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Deploy
+        env:
+          DEPLOY_HOST: ubuntu@api.example.com
+          DEPLOY_KEY: ~/.ssh/deploy_key
+          DEPLOY_URL: https://api.example.com
+        run: bash scripts/deploy.sh

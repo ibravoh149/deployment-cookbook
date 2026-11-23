@@ -1,0 +1,10 @@
+# https for {$DOMAIN}, with a certificate from Let's Encrypt renewed automatically. WebSockets pass through.
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy app:3000
+}
+
+# Another app on the same server: its own DNS record, its own block.
+# app2.example.com {
+# 	reverse_proxy app2:3000
+# }
